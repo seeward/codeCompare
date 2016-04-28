@@ -1,23 +1,17 @@
 using System;
-using System.Collections.Generic;
 using System.Text;
 using System.Data;
-using System.Linq;
-using System.Threading;
 using ICS.Database.TableObjects.JDE;
 using ICS.Database.TableObjects.RFS;
 using ICS.Display;
 using ICS.ERPI.JDE;
 using ICS.Utilities;
 using ICS.Workflow.Base.WorkflowDesign.Components;
-using ICS.BarcodeSubsystem;
-using MonroviaJDETables = ICS.Monrovia.Wireless.JDE.Database.TableObjects;
 
 
-
-namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
+namespace ICS.Base.Wireless.JDE.Workflow.Picking
 {
-    public partial class MonroviaCleanShip : RFSWorkflowDesigner
+    public partial class JDESalesOrderPicking : ICS.Workflow.Base.WorkflowDesign.Components.RFSWorkflowDesigner
     {
         #region enums
         /// <summary>
@@ -39,7 +33,7 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
         #region Class Variables
         #region Tables
         F0006 _branchTable;
-        MonroviaJDETables.F4211 _salesOrderTable;
+        F4211 _salesOrderTable;
         F4100 _locationTable;
         F4101 _itemMasterTable;
         F4102 _itemBranchTable;
@@ -57,28 +51,6 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
         DataTable _cachedRecords;
         RFS_PickReservations _pickReservations;
         RFS_Vocabulary _vocabTable;
-
-        private F0005 tableUserDefinedCode;
-
-        public F0005 _UserDefinedCodeTable
-        {
-            get { return tableUserDefinedCode ?? (tableUserDefinedCode = new F0005(DataAccess, "")); }
-        }
-
-        private MonroviaJDETables.F4960 tableLoadHeader;
-
-        public MonroviaJDETables.F4960 _LoadHeaderTable
-        {
-            get { return tableLoadHeader ?? (tableLoadHeader = new MonroviaJDETables.F4960(DataAccess, "")); }
-        }
-
-        private MonroviaJDETables.F4941 tableShipmentRouting;
-
-        public MonroviaJDETables.F4941 _ShipmentRoutingTable
-        {
-            get { return tableShipmentRouting ?? (tableShipmentRouting = new MonroviaJDETables.F4941(DataAccess, "")); }
-        }
-
         #endregion
         #region Workflow Options
         string[] _allowedStatus;
@@ -103,30 +75,6 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
         bool _defaultVerifyItem = false;
         private bool _defaultPalletID = false;
         private string _serialNumberType = string.Empty;
-
-        private bool? wfoDefaultFromLocation;
-
-        public bool _DefaultFromLocation
-        {
-            get
-            {
-                return (bool)(wfoDefaultFromLocation ??
-                               (wfoDefaultFromLocation =
-                                   WFOptions.GetYesNoWFOptionValue("DefaultFromLocation", false)));
-            }
-        }
-
-        private string[] wfoLoadStatus;
-
-        public string[] _LoadStatus
-        {
-            get
-            {
-                return wfoLoadStatus
-                       ?? (wfoLoadStatus = WFOptions.RetrieveOptionValue("LoadStatus")
-                           .Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries));
-            }
-        }
         #endregion
         #region Collected Data
         string _printerAddress = string.Empty;
@@ -143,18 +91,6 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
         string _shippingPrinterAddress = string.Empty;
         string _shipLabelReturnScreen = string.Empty;
         bool _isMixed = false;
-        private double _Load;
-        private string _ReasonCode;
-        private bool _LoadMode;
-        private bool _ReasonCodeCheck;
-        private bool _FromZeroPick;
-        private double _RemainingQuantity;
-        private string _Lot;
-        private double _OrderNumber;
-        private string _DocType;
-        private string _LongItemNumber;
-        private double _ShipmentNumber;
-        private string _INMG;
         #endregion
         #region Expected Data
         double _expectedShortItem = double.MinValue;
@@ -163,31 +99,21 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
         string _expectedHCLot = string.Empty;
         string _expectedLocn = string.Empty;
         string _expectedLot = string.Empty;
-        private double firstItemNumber;
-        private double firstOrderNumber;
-        private string firstOrderType;
-        private string firstLocation;
-        private string firstLotNumber;
-        private double lastSequence;
-        private double highestSequence;
         bool _isHardCommitted = false;
         bool _isFinished = false;
-        private bool _SequenceList;
-        private bool _ItemsAtSequence;
         #endregion
         #region ERPI
-        //ICS.ERPI.JDE.SalesOrderPick _pickTx = new SalesOrderPick();
-        ICS.ERPI.JDE.PckPicking _pickTx = new PckPicking();
+        ICS.ERPI.JDE.SalesOrderPick _pickTx = new SalesOrderPick();
         #endregion
         #endregion
         #region Constructors
-        public MonroviaCleanShip(UserSession userSession) :
+        public JDESalesOrderPicking(UserSession userSession) :
             base(ref userSession)
         {
             InitializeComponent();
             Transactions.ERP = "PeopleSoft";
         }
-        public MonroviaCleanShip()
+        public JDESalesOrderPicking()
             : base()
         {
             InitializeComponent();
@@ -198,7 +124,7 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
         {
             #region Tables
             _branchTable = new F0006(UserSession.DataAccess, "");
-            _salesOrderTable = new MonroviaJDETables.F4211(UserSession.DataAccess, "");
+            _salesOrderTable = new F4211(UserSession.DataAccess, "");
             _printersTable = new RFS_PrinterDefinition(UserSession.DataAccess, "");
             _locationTable = new F4100(UserSession.DataAccess, "");
             _itemMasterTable = new F4101(UserSession.DataAccess, "");
@@ -286,8 +212,8 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
         #region Dispose
         public override void Dispose()
         {
-            MonroviaUnlockAllRecords();
             ScreenMap.ClearAllWorkflows();
+            unlockAllRecords();
             _cartonRecords.Dispose();
             _skippedRecords.Dispose();
             deletePickReservation();
@@ -894,7 +820,6 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
                         {
                             qty += double.Parse(_salesOrderTable["QtyToPick"].ToString());
                         }
-                        // TODO replace with custom lock
                         _salesOrderTable.LockRecord(UserSession.EnvironmentId, UserSession.UserId, WorkflowID);
                         reservePick(_salesOrderTable.SDLOCN, _salesOrderTable.SDLOTN);
                     }
@@ -909,7 +834,7 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
             {
                 convertRemainSOQuantityToPrimaryUOM(false);
                 // Lock the Current Record
-                _salesOrderTable.MonroviaLockRecord(UserSession.EnvironmentId, UserSession.UserId, WorkflowID);
+                _salesOrderTable.LockRecord(UserSession.EnvironmentId, UserSession.UserId, WorkflowID);
                 reservePick(_salesOrderTable.SDLOCN, _salesOrderTable.SDLOTN);
                 Next(_collectFromLocation);
             }
@@ -1116,7 +1041,7 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
         #region skipPick
         private void skipPick()
         {
-            MonroviaUnlockAllRecords();
+            unlockAllRecords();
             DataRow dr = _skippedRecords.NewRow();
             dr["location"] = _expectedLocn;
             dr["lot"] = _expectedLot;
@@ -1185,43 +1110,6 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
                     else
                     {
                         _salesOrderTable.UnLockRecord(UserSession.EnvironmentId);
-                    }
-
-                }
-                catch
-                {
-                }
-                try
-                {
-                    deletePickReservation();
-                }
-                catch
-                {
-                }
-            }
-        }
-
-        private void MonroviaUnlockAllRecords()
-        {
-            if (_recordLocked)
-            {
-                try
-                {
-                    if (isSerialItem())
-                    {
-                        foreach (DataRow dr in _salesOrderTable.Rows)
-                        {
-                            _salesOrderTable.CurrentRow = dr;
-                            if (_salesOrderTable.SDITM == _itemMasterTable.IMITM)
-                            {
-                                _salesOrderTable.MonroviaUnLockRecord(UserSession.EnvironmentId);
-                            }
-                        }
-                        _salesOrderTable.CurrentRow = _salesOrderTable.Rows[0];
-                    }
-                    else
-                    {
-                        _salesOrderTable.MonroviaUnLockRecord(UserSession.EnvironmentId);
                     }
 
                 }
@@ -1397,7 +1285,7 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
 
         private bool isE1ShortPick()
         {
-            _orderUomtoPrimary = ConvertToUOMQty(_salesOrderTable.SDUOM, _itemMasterTable.IMUOM1, 1);
+            _orderUomtoPrimary = ConvertToUOMQty(_salesOrderTable.SDUOM, _salesOrderTable.CurrentRow["IMUOM1"].ToString(), 1);
 
             if (_quantity < (_orderUomtoPrimary * _salesOrderTable.SDSOQS / _conversionFactor) - getPickedQty())
             {
@@ -1412,111 +1300,68 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
         {
             Transactions.Add(_pickTx);
             _pickTx.Initialize();
-            int i = 0;
-            if (!_salesOrderTable.ZeroExplodeShipmentFetch(_collectBranch.ScreenInput, _Load, _allowedStatus, _LoadStatus, _shortItem, _OrderNumber, _DocType, null, -1))
-            {
-                throw new RFS_Exception("ITEMNOTONLOAD");
-            }
-            //foreach (DataRow row in _salesOrderTable.Rows)
-            //{
-                //_salesOrderTable.CurrentRow = row;
-                //setShipTo();
-                //setSoldTo();
-                //_collectFromLocation.ScreenInput = _salesOrderTable.SDLOCN;
-                //setFromLocation();
-                //setItem();
-                _pickTx.DocumentNumber = _salesOrderTable.SDDOCO.ToString();
-                //_pickTx.OrderNumber = _salesOrderTable.SDDOCO.ToString();
-                _pickTx.DocumentType = _salesOrderTable.SDDCTO.Trim();
-                //_pickTx.OrderType = _salesOrderTable.SDDCTO.Trim();
-                _pickTx.OrderCompany = _salesOrderTable.SDKCOO.Trim();
-                _pickTx.LineNumber = _salesOrderTable.SDLNID.ToString();
-                //_pickTx.BranchPlant = _salesOrderTable.SDMCU.Trim();
-                //_pickTx.Lot = _salesOrderTable.SDLOTN.Trim();
-                //_pickTx.PickQuantity = string.Empty;
-                //_pickTx.Quantity = _salesOrderTable.SDSOQS.ToString();
-                //_pickTx.PickUOM = _salesOrderTable.SDUOM.Trim();
-                //_pickTx.UOM = _salesOrderTable.SDUOM.Trim();
-                _pickTx.RFUserID = UserSession.CurrentUser.LoginName;
-                _pickTx.Mode = "Z";
-                _pickTx.TransDate_YYYYMMDD = System.DateTime.Now.ToString("yyyyMMdd");
-                /*
-                _pickTx.P4205Version = string.Empty;
-                _pickTx.ToLocation = string.Empty;
-                _pickTx.P4113Version = string.Empty;
-                  */
-                //_pickTx.Version = WFOptions.RetrieveOptionValue("P4205Version");
-                //_pickTx.SecondaryQty = string.Empty;
-                //_pickTx.SecondaryQuantity = string.Empty;
-                //_pickTx.SecondaryUOM = string.Empty;
-                //_pickTx.ToCartonID = string.Empty;
-                //_pickTx.CartonQuantity = string.Empty;
-                //_pickTx.CustomerCartonId = string.Empty;
-                //_pickTx.CartonCode = string.Empty;
-                //_pickTx.CartonP4620Version = string.Empty;
-                if (_ReasonCodeCheck)
-                {
-                    _pickTx.UserInput01 = _ReasonCode;
-                }
-                else
-                {
-                    _pickTx.UserInput01 = string.Empty;
-                }
-                _pickTx.UserInput02 = WFOptions.RetrieveOptionValue("ZeroPickNextStatus");
-                //_pickTx.UserInput03 = string.Empty;
-                //_pickTx.UserInput04 = string.Empty;
-                //_pickTx.UserInput05 = string.Empty;
-                //_pickTx.UserInput06 = string.Empty;
-                //_pickTx.UserInput07 = string.Empty;
-                //_pickTx.Container = string.Empty;
-                //_pickTx.ContainerID = string.Empty;
-                //_pickTx.ZeroPickNextStatus = WFOptions.RetrieveOptionValue("ZeroPickNextStatus");
-                //if (i > 0)
-                //{
-                //    _pickTx.AddToBoundaryWithData();
-                //}
-                //i++;
-            //}
+            setShipTo();
+            setSoldTo();
+            _collectFromLocation.ScreenInput = _salesOrderTable.SDLOCN;
+            setFromLocation();
+            setItem();
+            _pickTx.OrderNumber = _salesOrderTable.SDDOCO.ToString();
+            _pickTx.OrderType = _salesOrderTable.SDDCTO.Trim();
+            _pickTx.OrderCompany = _salesOrderTable.SDKCOO.Trim();
+            _pickTx.LineNumber = _salesOrderTable.SDLNID.ToString();
+            _pickTx.BranchPlant = _salesOrderTable.SDMCU.Trim();
+            _pickTx.Lot = _salesOrderTable.SDLOTN.Trim();
+            _pickTx.Quantity = _salesOrderTable.SDSOQS.ToString();
+            _pickTx.UOM = _salesOrderTable.SDUOM.Trim();
+            _pickTx.RFUserID = UserSession.CurrentUser.LoginName;
+            _pickTx.Mode = "Z";
+            _pickTx.TransDate_YYYYMMDD = System.DateTime.Now.ToString("yyyyMMdd");
+            _pickTx.P4205Version = string.Empty;
+            _pickTx.ToLocation = string.Empty;
+            _pickTx.P4113Version = string.Empty;
+            _pickTx.SecondaryQuantity = string.Empty;
+            _pickTx.SecondaryUOM = string.Empty;
+            _pickTx.ToCartonID = string.Empty;
+            _pickTx.CartonQuantity = string.Empty;
+            _pickTx.CustomerCartonId = string.Empty;
+            _pickTx.CartonCode = string.Empty;
+            _pickTx.CartonP4620Version = string.Empty;
+            _pickTx.UserInput01 = string.Empty;
+            _pickTx.UserInput02 = string.Empty;
+            _pickTx.UserInput03 = string.Empty;
+            _pickTx.UserInput04 = string.Empty;
+            _pickTx.UserInput05 = string.Empty;
+            _pickTx.UserInput06 = string.Empty;
+            _pickTx.UserInput07 = string.Empty;
+            _pickTx.ContainerID = string.Empty;
+            _pickTx.ZeroPickNextStatus = WFOptions.RetrieveOptionValue("ZeroPickNextStatus");
 
             Transactions.Send(WFOptions.RetrieveOptionValue("SyncTransaction"));
             SendZeroMail();
             DisplayMessages();
-            firstItemNumber = _salesOrderTable.SDITM;
-            firstLotNumber = _salesOrderTable.SDLOTN;
-            firstOrderNumber = _salesOrderTable.SDDOCO;
-            firstOrderType = _salesOrderTable.SDDCTO;
-            firstLocation = _salesOrderTable.SDLOCN;
-            lastSequence = Convert.ToDouble(_salesOrderTable["RSSTSQ"].ToString());
-            _FromZeroPick = false;
-            _ReasonCodeCheck = false;
             deletePickReservation();
-            foreach (DataRow row in _salesOrderTable.Rows)
-            {
-                _salesOrderTable.CurrentRow = row;
-                _salesOrderTable.MonroviaUnLockRecord(UserSession.EnvironmentId);
-            }
         }
         private void setSoldTo()
         {
-            //_pickTx.CustSoldTo = _salesOrderTable.SDAN8.ToString();
+            _pickTx.CustSoldTo = _salesOrderTable.SDAN8.ToString();
             _addressBookTable.RetrieveAddress(_salesOrderTable.SDAN8.ToString());
-            //_pickTx.CustSoldToDescr = _addressBookTable.ABALPH.Trim();
+            _pickTx.CustSoldToDescr = _addressBookTable.ABALPH.Trim();
         }
         private void setShipTo()
         {
-            //_pickTx.CustShipTo = _salesOrderTable.SDSHAN.ToString();
+            _pickTx.CustShipTo = _salesOrderTable.SDSHAN.ToString();
             _addressBookTable.RetrieveAddress(_salesOrderTable.SDSHAN.ToString());
-            //_pickTx.CustShipToDescr = _addressBookTable.ABALPH.Trim();
+            _pickTx.CustShipToDescr = _addressBookTable.ABALPH.Trim();
         }
         private void setFromLocation()
         {
             _pickTx.Location = _collectFromLocation.ScreenInput; // Keep format the same as in E1 DB.
             if (_locationTable.ValidateLocation(_salesOrderTable.SDMCU.Trim(), _collectFromLocation.ScreenInput))
             {
-                //_pickTx.FromLocnPutZone = _locationTable.LMPZON.Trim();
-                //_pickTx.FromLocnPickZone = _locationTable.LMKZON.Trim();
-                //_pickTx.FromLocnReplZone = _locationTable.LMZONR.Trim();
-                //_pickTx.FromLocnDimGroup = _locationTable.LMSTY1.Trim();
+                _pickTx.FromLocnPutZone = _locationTable.LMPZON.Trim();
+                _pickTx.FromLocnPickZone = _locationTable.LMKZON.Trim();
+                _pickTx.FromLocnReplZone = _locationTable.LMZONR.Trim();
+                _pickTx.FromLocnDimGroup = _locationTable.LMSTY1.Trim();
             }
         }
         private void setCartonFromLocation(string fromLocation)
@@ -1524,21 +1369,21 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
             _pickTx.Location = fromLocation; // Keep format the same as in E1 DB.
             if (_locationTable.ValidateLocation(_salesOrderTable.SDMCU.Trim(), fromLocation))
             {
-                //_pickTx.FromLocnPutZone = _locationTable.LMPZON.Trim();
-                //_pickTx.FromLocnPickZone = _locationTable.LMKZON.Trim();
-                //_pickTx.FromLocnReplZone = _locationTable.LMZONR.Trim();
-                //_pickTx.FromLocnDimGroup = _locationTable.LMSTY1.Trim();
+                _pickTx.FromLocnPutZone = _locationTable.LMPZON.Trim();
+                _pickTx.FromLocnPickZone = _locationTable.LMKZON.Trim();
+                _pickTx.FromLocnReplZone = _locationTable.LMZONR.Trim();
+                _pickTx.FromLocnDimGroup = _locationTable.LMSTY1.Trim();
             }
         }
         private void setToLocation()
         {
-            //_pickTx.ToLocation = _collectTransferLocation.ScreenInput; // Keep format the same as in E1 DB.
+            _pickTx.ToLocation = _collectTransferLocation.ScreenInput; // Keep format the same as in E1 DB.
             if (_locationTable.ValidateLocation(_salesOrderTable.SDMCU.Trim(), _collectTransferLocation.ScreenInput))
             {
-                //_pickTx.ToLocnPutZone = _locationTable.LMPZON.Trim();
-                //_pickTx.ToLocnPickZone = _locationTable.LMKZON.Trim();
-                //_pickTx.ToLocnReplZone = _locationTable.LMZONR.Trim();
-                //_pickTx.ToLocnDimGroup = _locationTable.LMSTY1.Trim();
+                _pickTx.ToLocnPutZone = _locationTable.LMPZON.Trim();
+                _pickTx.ToLocnPickZone = _locationTable.LMKZON.Trim();
+                _pickTx.ToLocnReplZone = _locationTable.LMZONR.Trim();
+                _pickTx.ToLocnDimGroup = _locationTable.LMSTY1.Trim();
             }
         }
         private void setItem()
@@ -1547,211 +1392,134 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
             _pickTx.SecondItemNumber = _itemMasterTable.IMLITM.Trim();
             _pickTx.ShortItemNumber = _itemMasterTable.IMITM.ToString();
             _pickTx.ThirdItemNumber = _itemMasterTable.IMAITM.Trim();
-            //_pickTx.ItemDescription1 = _itemMasterTable.IMDSC1.Trim();
-            //_pickTx.ItemDescription2 = _itemMasterTable.IMDSC2.Trim();
+            _pickTx.ItemDescription1 = _itemMasterTable.IMDSC1.Trim();
+            _pickTx.ItemDescription2 = _itemMasterTable.IMDSC2.Trim();
             _itemBranchTable.ValidateItemBranch(_salesOrderTable.SDMCU.Trim(), _itemMasterTable.IMITM);
-            //_pickTx.ItemDimGroup = _itemBranchTable.IBPRP6.Trim();
-            //_pickTx.ItemLotProcType = _itemBranchTable.IBSRCE;
+            _pickTx.ItemDimGroup = _itemBranchTable.IBPRP6.Trim();
+            _pickTx.ItemLotProcType = _itemBranchTable.IBSRCE;
         }
         private void SendToERP()
         {
-            Log.Debug("SendToERP");
             Transactions.Add(_pickTx);
             _pickTx.Initialize();
-            int i = 0;
-            Log.Debug("Branch = " + _collectBranch.ScreenInput);
-            Log.Debug("_ShipmentNumber = " + _ShipmentNumber);
-            Log.Debug("_ShortItem = " + _shortItem);
-            if (!_salesOrderTable.ExplodeShipmentFetch(_collectBranch.ScreenInput, _Load, _allowedStatus, _LoadStatus, _shortItem, _OrderNumber, _DocType))
+            setSoldTo();
+            setShipTo();
+            setFromLocation();
+            setToLocation();
+            setItem();
+            _pickTx.OrderNumber = _salesOrderTable.SDDOCO.ToString();
+            _pickTx.OrderType = _salesOrderTable.SDDCTO.Trim();
+            _pickTx.OrderCompany = _salesOrderTable.SDKCOO.Trim();
+            _pickTx.LineNumber = _salesOrderTable.SDLNID.ToString();
+            _pickTx.BranchPlant = _salesOrderTable.SDMCU.Trim();
+            _pickTx.Lot = _collectLot.ScreenInput.Trim();
+            _pickTx.Quantity = ConvertToUOMQty(_collectUnitOfMeasure.ScreenInput,
+                                               _salesOrderTable.SDUOM,
+                                               (_quantity + getPickedQty())).ToString();
+            _pickTx.UOM = _salesOrderTable.SDUOM.Trim();
+            _pickTx.RFUserID = UserSession.CurrentUser.LoginName;
+            _pickTx.Mode = string.Empty;
+            _pickTx.TransDate_YYYYMMDD = System.DateTime.Now.ToString("yyyyMMdd");
+            _pickTx.P4205Version = WFOptions.RetrieveOptionValue("P4205Version");
+            _pickTx.ToLocation = _collectTransferLocation.ScreenInput;
+            _pickTx.P4113Version = _transferP4113Version.Trim();
+            _pickTx.SecondaryQuantity = string.Empty;
+            _pickTx.SecondaryUOM = string.Empty;
+            _pickTx.UserInput01 = string.Empty;
+            _pickTx.UserInput02 = string.Empty;
+            _pickTx.UserInput03 = string.Empty;
+            _pickTx.UserInput04 = string.Empty;
+            _pickTx.UserInput05 = string.Empty;
+            _pickTx.UserInput06 = string.Empty;
+            _pickTx.UserInput07 = string.Empty;
+            _pickTx.ContainerID = _collectContainer.ScreenInput.Trim();
+            if (_isFinished || !_cartonEnabled)
             {
-                throw new RFS_Exception("ITEMNOTONLOAD");
+                _pickTx.ManuallySplitSalesOrder = " ";
             }
-            _RemainingQuantity = _quantity;
-            Log.Debug("_RemainingQuantity = " + _RemainingQuantity);
-            foreach (DataRow row in _salesOrderTable.Rows)
+            else
             {
-                _salesOrderTable.CurrentRow = row;
-                if (_RemainingQuantity > _salesOrderTable.SDUORG)
+                _pickTx.ManuallySplitSalesOrder = "1";  
+            }
+            if (getPickedQty() == 0 || (!_cartonEnabled && !_forceLine))
+            {
+                _pickTx.ToCartonID = string.Empty;
+                _pickTx.CartonQuantity = string.Empty;
+                _pickTx.CustomerCartonId = string.Empty;
+                _pickTx.CartonCode = string.Empty;
+                _pickTx.CartonP4620Version = string.Empty;
+            }
+            else
+            {
+                _pickTx.Mode = "1";
+                if (_forceLine && !_cartonEnabled)
                 {
-                    _quantity = _salesOrderTable.SDUORG;
-                    Log.Debug("_quantity = " + _quantity);
-                    _RemainingQuantity = _RemainingQuantity - _quantity;
-                    Log.Debug("_RemainingQuantity = " + _RemainingQuantity);
-                }
-                else
-                {
-                    _quantity = _RemainingQuantity;
-                    Log.Debug("_RemainingQuantity = " + _RemainingQuantity);
-                    Log.Debug("_quantity = " + _quantity);
-                    _RemainingQuantity = 0;
-                    Log.Debug("_RemainingQuantity = " + _RemainingQuantity);
-                }
-                //setSoldTo();
-                //setShipTo();
-                //setFromLocation();
-                //setToLocation();
-                //setItem();
-                //_pickTx.OrderNumber = _salesOrderTable.SDDOCO.ToString();
-                //_pickTx.OrderType = _salesOrderTable.SDDCTO.Trim();
-                _pickTx.OrderCompany = _salesOrderTable.SDKCOO;
-                _pickTx.DocumentNumber = _salesOrderTable.SDDOCO.ToString();
-                _pickTx.DocumentType = _salesOrderTable.SDDCTO;
-                _pickTx.OrderCompany = _salesOrderTable.SDKCOO.Trim();
-                _pickTx.LineNumber = _salesOrderTable.SDLNID.ToString();
-                _pickTx.BranchPlant = _salesOrderTable.SDMCU.Trim();
-                _pickTx.Lot = _collectLot.ScreenInput.Trim();
-                _pickTx.PrimaryItemNumber = _primaryItem.Trim();
-                _pickTx.SecondItemNumber = _salesOrderTable.SDLITM;
-                _pickTx.ShortItemNumber = _salesOrderTable.SDITM.ToString();
-                _pickTx.ThirdItemNumber = _salesOrderTable.SDAITM;
-                _pickTx.Location = _collectFromLocation.ScreenInput;
-                _pickTx.PickQuantity = _quantity.ToString();
-                _pickTx.PickUOM = _salesOrderTable.SDUOM;
-                //_pickTx.Quantity = ConvertToUOMQty(_collectUnitOfMeasure.ScreenInput,
-                //_salesOrderTable.SDUOM,
-                //(_quantity + getPickedQty())).ToString();
-                //_pickTx.UOM = _salesOrderTable.SDUOM.Trim();
-                _pickTx.RFUserID = UserSession.CurrentUser.LoginName;
-                _pickTx.Mode = string.Empty;
-                _pickTx.TransDate_YYYYMMDD = System.DateTime.Now.ToString("yyyyMMdd");
-                _pickTx.CartonP4620Version = WFOptions.RetrieveOptionValue("P4620Version");
-                _pickTx.Version = WFOptions.RetrieveOptionValue("P4205Version");
-                //_pickTx.TransferLocation = _collectTransferLocation.ScreenInput;
-                //_pickTx.P4113Version = _transferP4113Version.Trim();
-                //_pickTx.SecondaryQuantity = string.Empty;
-                _pickTx.SecondaryQty = string.Empty;
-                _pickTx.SecondaryUOM = string.Empty;
-                _pickTx.TransferLocation = _collectTransferLocation.ScreenInput;
-                if (_ReasonCodeCheck)
-                {
-                    _pickTx.UserInput01 = _ReasonCode;
-                }
-                else
-                {
-                    _pickTx.UserInput01 = string.Empty;
-                }
-                _pickTx.UserInput03 = string.Empty;
-                _pickTx.UserInput04 = string.Empty;
-                _pickTx.UserInput05 = string.Empty;
-                _pickTx.UserInput06 = string.Empty;
-                _pickTx.UserInput07 = string.Empty;
-                //_pickTx.ContainerID = _collectContainer.ScreenInput.Trim();
-                _pickTx.Mode = i == 0 ? "P" : "P1";
-                if (_isFinished || !_cartonEnabled)
-                {
-                    //_pickTx.ManuallySplitSalesOrder = " ";
-                }
-                else
-                {
-                    //_pickTx.ManuallySplitSalesOrder = "1";
-                }
-                if (_salesOrderTable.SDUORG != _quantity)
-                {
-                    _pickTx.UserInput03 = "1";
-                }
-                else
-                {
-                    _pickTx.UserInput03 = " ";
-                }
-                if (getPickedQty() == 0 || (!_cartonEnabled && !_forceLine))
-                {
-                    _pickTx.ToCartonID = string.Empty;
-                    _pickTx.CartonQuantity = string.Empty;
-                    _pickTx.CustomerCartonId = string.Empty;
-                    _pickTx.CartonCode = string.Empty;
-                    _pickTx.CartonP4620Version = string.Empty;
-                }
-                else
-                {
-                    _pickTx.Mode = "1";
-                    if (_forceLine && !_cartonEnabled)
+                    DataTable cartonTemp = _cartonRecords.DefaultView.ToTable(true, new string[] { "location", "container", "lot" });
+                    foreach (DataRow dr in cartonTemp.Rows)
                     {
-                        DataTable cartonTemp = _cartonRecords.DefaultView.ToTable(true, new string[] { "location", "container", "lot" });
-                        foreach (DataRow dr in cartonTemp.Rows)
-                        {
-                            setCartonFromLocation(dr["location"].ToString());
-                            //_pickTx.ContainerID = dr["container"].ToString();
-                            _pickTx.Lot = dr["lot"].ToString();
-                            //_pickTx.Quantity = ConvertToUOMQty(_collectUnitOfMeasure.ScreenInput,
-                            //_salesOrderTable.SDUOM,
-                            //getItemLotContainerQty(dr["location"].ToString(), dr["lot"].ToString(), dr["container"].ToString())).ToString();
+                        setCartonFromLocation(dr["location"].ToString());
+                        _pickTx.ContainerID = dr["container"].ToString();
+                        _pickTx.Lot = dr["lot"].ToString();
+                        _pickTx.Quantity = ConvertToUOMQty(_collectUnitOfMeasure.ScreenInput,
+                                                    _salesOrderTable.SDUOM,
+                                                    getItemLotContainerQty(dr["location"].ToString(), dr["lot"].ToString(), dr["container"].ToString())).ToString();
 
-                            _pickTx.AddToBoundaryWithData();
-                            _pickTx.Mode = "C";
-                        }
-                        cartonTemp.Dispose();
+                        _pickTx.AddToBoundaryWithData();
+                        _pickTx.Mode = "C";
                     }
+                    cartonTemp.Dispose();
+                }
 
-                    if (_cartonEnabled)
+                if (_cartonEnabled)
+                {
+                    _pickTx.SerialNumberType = _serialNumberType;
+                    foreach (DataRow dr in _cartonRecords.Rows)
                     {
-                        _pickTx.SerialNumberType = _serialNumberType;
-                        foreach (DataRow dr in _cartonRecords.Rows)
+                        _pickTx.Pallet = dr["palletId"].ToString();
+                        _pickTx.PalletType = dr["palletType"].ToString();
+                 
+                        if (_jdeCartonTable.GetCarton(_salesOrderTable.SDMCU.Trim(), dr["carton"].ToString()))
                         {
-                            _pickTx.Pallet = dr["palletId"].ToString();
-                            _pickTx.PalletType = dr["palletType"].ToString();
-
-                            if (_jdeCartonTable.GetCarton(_salesOrderTable.SDMCU.Trim(), dr["carton"].ToString()))
-                            {
-                                _pickTx.ToCartonID = _jdeCartonTable.CDCRID.ToString();
-                                _pickTx.CartonCode = _jdeCartonTable.CDEQTY.Trim();
-                            }
-                            else
-                            {
-                                _pickTx.ToCartonID = string.Empty;
-                                _pickTx.CartonCode = dr["cartonType"].ToString().Trim();
-                            }
-                            setCartonFromLocation(dr["location"].ToString());
-                            //_pickTx.ContainerID = dr["container"].ToString();
-                            _pickTx.Lot = dr["lot"].ToString();
-                            //_pickTx.Quantity = ConvertToUOMQty(_collectUnitOfMeasure.ScreenInput,
-                            //_salesOrderTable.SDUOM,
-                            //getItemLotContainerQty(dr["location"].ToString(), dr["lot"].ToString(), dr["container"].ToString())).ToString();
-
-                            _pickTx.CartonQuantity = ConvertToUOMQty(_collectUnitOfMeasure.ScreenInput,
-                                                       _salesOrderTable.SDUOM, double.Parse(dr["quantity"].ToString())).ToString();
-                            _pickTx.CustomerCartonId = dr["carton"].ToString().Trim();
-                            _pickTx.CartonP4620Version = WFOptions.RetrieveOptionValue("CartonP4620Version");
-
-                            _pickTx.AddToBoundaryWithData();
-                            _pickTx.Mode = "C";
+                            _pickTx.ToCartonID = _jdeCartonTable.CDCRID.ToString();
+                            _pickTx.CartonCode = _jdeCartonTable.CDEQTY.Trim();
                         }
+                        else
+                        {
+                            _pickTx.ToCartonID = string.Empty;
+                            _pickTx.CartonCode = dr["cartonType"].ToString().Trim();
+                        }
+                        setCartonFromLocation(dr["location"].ToString());
+                        _pickTx.ContainerID = dr["container"].ToString();
+                        _pickTx.Lot = dr["lot"].ToString();
+                        _pickTx.Quantity = ConvertToUOMQty(_collectUnitOfMeasure.ScreenInput,
+                                                    _salesOrderTable.SDUOM,
+                                                    getItemLotContainerQty(dr["location"].ToString(), dr["lot"].ToString(), dr["container"].ToString())).ToString();
+
+                        _pickTx.CartonQuantity = ConvertToUOMQty(_collectUnitOfMeasure.ScreenInput,
+                                                   _salesOrderTable.SDUOM, double.Parse(dr["quantity"].ToString())).ToString();
+                        _pickTx.CustomerCartonId = dr["carton"].ToString().Trim();
+                        _pickTx.CartonP4620Version = WFOptions.RetrieveOptionValue("CartonP4620Version");
+
+                        _pickTx.AddToBoundaryWithData();
+                        _pickTx.Mode = "C";
                     }
                 }
+                #region End Doc
+                _pickTx.Mode = "2";
+                #endregion
+                #region Clear Cache
                 _pickTx.AddToBoundaryWithData();
-                i++;
-                if (_RemainingQuantity == 0)
-                {
-                    break;
-                }
+                _pickTx.Mode = "3";
+                #endregion
             }
-            #region End Doc
-            _pickTx.Mode = "2";
-            #endregion
-            #region Clear Cache
-            _pickTx.AddToBoundaryWithData();
-            _pickTx.Mode = "3";
-            #endregion
 
             Transactions.Send(WFOptions.RetrieveOptionValue("SyncTransaction"));
             if (!Transactions.Success)
             {
                 SendE1Error();
             }
-            firstItemNumber = _salesOrderTable.SDITM;
-            firstLotNumber = _salesOrderTable.SDLOTN;
-            firstOrderNumber = _salesOrderTable.SDDOCO;
-            firstOrderType = _salesOrderTable.SDDCTO;
-            firstLocation = _salesOrderTable.SDLOCN;
-            lastSequence = Convert.ToDouble(_salesOrderTable["RSSTSQ"].ToString());
             DisplayMessages();
-            _FromZeroPick = false;
-            _ReasonCodeCheck = false;
             deletePickReservation();
-            foreach (DataRow row in _salesOrderTable.Rows)
-            {
-                _salesOrderTable.CurrentRow = row;
-                _salesOrderTable.MonroviaUnLockRecord(UserSession.EnvironmentId); 
-            }
             _forceLine = false;
         }
         #endregion
@@ -1766,10 +1534,7 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
                 case "2": // by PickSlip
                     Next(_collectPickSlip);
                     break;
-                case "3": // by Load
-                    Next(CollectLoad);
-                    break;
-                case "4": // by Shipment
+                case "3": // by Shipment
                     Next(_collectShipment);
                     break;
             } // end switch
@@ -1812,8 +1577,8 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
                 case "2": // by PickSlip
                     RestartLoop(_collectPickSlip);
                     break;
-                case "3": // by Load
-                    RestartLoop(CollectLoad);
+                case "3": // by Shipment
+                    RestartLoop(_collectShipment);
                     break;
             } // end switch
         }
@@ -1951,13 +1716,13 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
             if (_collectPickMode.ScreenInput.Length == 0)
             {
                 throw new RFS_Exception("INVALIDPICKMODE");
-            }
+            } 
             else
             {
                 try
                 {
                     int i = Convert.ToInt16(_collectPickMode.ScreenInput);
-                    if ((i < 1) || (i > 3))
+                    if ((i < 1) || (i > 2))
                     {
                         throw new RFS_Exception("INVALIDPICKMODE");
                     } // end if
@@ -1965,11 +1730,6 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
                     {
                         decisionTable1();
                     } // end else
-
-                    if (i == 3)
-                    {
-                        _LoadMode = true;
-                    }
                 } // end try
                 catch
                 {
@@ -1986,7 +1746,7 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
 
         private void validateOrder(string order)
         {
-
+            
             try
             {
                 double dOrder = double.Parse(order);
@@ -2056,12 +1816,12 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
 
         private bool isValidDocType(string docType)
         {
-
+            
             if (_allowedDocTypes == null || _allowedDocTypes.Length != 0 || _allowedDocTypes[0] != "" || _allowedDocTypes[0] != "*")
             {
                 return true;
             }
-
+            
             // determine whether document type of order is allowed
             // based on the workflow options.
 
@@ -2336,7 +2096,7 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
             }
             return true;
         }
-        #endregion
+        #endregion 
         #region TransferLocation
         private void _collectTransferLocation_EnterValidationEvent(RFSScreenControl sender, ScreenEventArgs e)
         {
@@ -2428,58 +2188,15 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
         }
         #endregion
         #region CollectItem
-
-        private void _collectItem_LoadEvent(RFSScreenControl sender, ScreenEventArgs e)
-        {
-            _ItemsAtSequence = false;
-
-            if (_SequenceList)
-            {
-                _salesOrderTable.OpenShipmentFetch(_collectBranch.ScreenInput, _Load, _allowedStatus, _LoadStatus);
-                foreach (DataRow dataRow in _salesOrderTable.Rows)
-                {
-                    Log.Debug("_ItemAtSequence = " + _ItemsAtSequence);
-                    _salesOrderTable.CurrentRow = dataRow;
-                    if (Double.Parse(_salesOrderTable["RSSTSQ"].ToString()) == lastSequence)
-                    {
-                        _ItemsAtSequence = true;
-                        break;
-                    }
-                    Log.Debug(" AFTERIF - _ItemAtSequence = " + _ItemsAtSequence);
-                }
-            }
-        }
-
         private void _collectItem_EnterValidationEvent(RFSScreenControl sender, ScreenEventArgs e)
         {
-            validateItem(true);
+            validateItem(e.UserInput.ToString().Trim());
+
         }
 
-        private void validateItem(bool ParseBarcode)
+        private void validateItem(string item)
         {
-            Log.Debug("validateItem");
-
-            if (ParseBarcode)
-            {
-                _OrderNumber = Convert.ToDouble(ScreenHandler.BarcodeParseSystem.GetValue("MNCORDERNUMBER"));
-                _DocType = ScreenHandler.BarcodeParseSystem.GetValue("MNCDOCTYPE").ToString().ToUpper();
-                _LongItemNumber = ScreenHandler.BarcodeParseSystem.GetValue("MNCITEMNUMBER").ToString();
-                _Lot = ScreenHandler.BarcodeParseSystem.GetValue("MNCLOT").ToString();
-            }
-            else
-            {
-                _OrderNumber = _salesOrderTable.SDDOCO;
-                _DocType = _salesOrderTable.SDDCTO;
-                _LongItemNumber = _salesOrderTable.SDLITM;
-                _Lot = _salesOrderTable.SDLOTN;
-            }
-
-            Log.Debug("_OrderNumber = " + _OrderNumber);
-            Log.Debug("_DocType = " + _DocType);
-            Log.Debug("_LongItemNumber = " + _LongItemNumber);
-            Log.Debug("_Lot = " + _Lot);
-
-            if(String.IsNullOrWhiteSpace(_LongItemNumber))
+            if (item.Trim().Length == 0)
             {
                 _collectItem.ScreenInput = string.Empty;
                 _shortItem = double.MinValue;
@@ -2487,9 +2204,10 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
             else
             {
                 _itemMasterTable.ResetAll();
+
                 // Use the returned result to display the proper item number
                 _primaryItem = _itemMasterTable.RetrieveItem(_collectBranch.ScreenInput,
-                                                            _LongItemNumber,
+                                                            item,
                                                             _warehouseConstantsTable._DesignatedPrimaryItemNumber.ToString());
                 if (_primaryItem == null)
                 {
@@ -2498,85 +2216,9 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
                 _collectItem.ScreenInput = _primaryItem;
                 _shortItem = _itemMasterTable.IMITM;
             }
-            if (
-                !_salesOrderTable.OpenShipmentFetch(_collectBranch.ScreenInput, _Load, _allowedStatus, _LoadStatus,
-                    _shortItem, _OrderNumber, _DocType))
-            {
-                throw new RFS_Exception("ITEM NOT ON LOAD");
-            }
 
-            /*//Check to see if the current record is hard committed and if so, if we are allowed to override it, setting the necessary flags
-            if ((!_allowOverrideHardCommits) && ((_salesOrderTable.SDCOMM == "H") || (_salesOrderTable.SDCOMM == "C")))
-            {
-                _isHardCommitted = true;
-                _expectedHCLocn = _expectedLocn;
-                _expectedHCLot = _expectedLot;
-            }
-            else
-            {
-                _isHardCommitted = false;
-                _expectedHCLocn = string.Empty;
-                _expectedHCLot = string.Empty;
-            }*/
-
-            //If the Allow Override Hard Commits workflow option is set to false, we assume the record is hard committed
-            _isHardCommitted = !_allowOverrideHardCommits;
-
-            _expectedHCLocn = _salesOrderTable.SDLOCN;
-            _expectedHCLot = _salesOrderTable.SDLOTN;
-
-            
-            Log.Debug("lastSequence = " + lastSequence);
-            Log.Debug("_salesOrderTable[RSSTSQ] = " + _salesOrderTable["RSSTSQ"].ToString());
-            Log.Debug("_ItemsAtSequence = " + _ItemsAtSequence);
-
-            if (!_SequenceList)
-            {
-                Log.Debug("if !_SequenceList");
-                Log.Debug("highestSequence = " + highestSequence);
-                if (Double.Parse(_salesOrderTable["RSSTSQ"].ToString()) < highestSequence)
-                {
-                    Next(WarningHigherSequence);
-                }
-            }
-            else if (Double.Parse(_salesOrderTable["RSSTSQ"].ToString()) != lastSequence && _ItemsAtSequence)
-            {
-                Log.Debug("lastSequence && _ItemsAtSequence");
-                Next(WarningDifferentSequence);
-            }
-            else
-            {
-                Next(_collectFromLocation);
-            }
-            ScreenMap.Add("ItemNumber", _LongItemNumber);
-            ScreenMap.Add("ItemDescription", _itemMasterTable.IMDSC1);
-            ScreenMap.Add("Order", _OrderNumber.ToString());
-            _ShipmentNumber = _salesOrderTable.SDSHPN;
-            _INMG = _salesOrderTable.SDINMG;
-            //getPickingData();
-            //beginPicking();
-            _SequenceList = true;
-        }
-
-        private bool _collectItem_F2Method(RFSScreenControl sender, ScreenEventArgs e)
-        {
-            if (!_SequenceList)
-            {
-                throw new RFS_Exception("FIRST ITEM");
-            }
-            Next(SequenceList);
-            return true;
-        }
-
-        private void SequenceList_LoadEvent(RFSScreenControl sender, ScreenEventArgs e)
-        {
-            _salesOrderTable.SequenceListFetch(_collectBranch.ScreenInput, _Load, lastSequence, _allowedStatus, _LoadStatus);
-        }
-
-        private void SequenceList_EnterValidationEvent(RFSScreenControl sender, ScreenEventArgs screenEventArgs)
-        {
-            _salesOrderTable.UpdateCurrentRow();
-            validateItem(false);
+            getPickingData();
+            beginPicking();
         }
 
         private bool _collectItem_F9Method(RFSScreenControl sender, ScreenEventArgs e)
@@ -2609,9 +2251,9 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
                 throw new RFS_Exception("LocationMismatch");
             }
             // item must exist in location.
-            if (!_itemLocationTable.RetrieveItemLocationRecords(_collectBranch.ScreenInput, _shortItem, "N",
+            if (!_itemLocationTable.RetrieveItemLocationRecords(_collectBranch.ScreenInput, _shortItem, "N", 
                 // Allow Hard commits to be picked from hard commit location even if it is not a picking location. 
-                (!_isHardCommitted || (_expectedHCLocn != _locationTable.stbllocn)) && int.Parse(_dynamicPick) != 1,
+                (!_isHardCommitted || (_expectedHCLocn != _locationTable.stbllocn))  && int.Parse(_dynamicPick) != 1,
                 _locationTable.stbllocn, _allowedHoldCodes))
             {
                 if (!_itemLocationTable.RetrieveSpecificRecordWithQuantity(_collectBranch.ScreenInput, _shortItem, _locationTable.stbllocn))
@@ -2659,7 +2301,7 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
             {
                 throw new RFS_Exception("MustFinishLine");
             }
-            MonroviaUnlockAllRecords();
+            unlockAllRecords();
             _orderDetailList.Show();
             return true;
         }
@@ -2680,16 +2322,12 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
 
         private void _collectFromLocation_BackValidationEvent(RFSScreenControl sender, ScreenEventArgs e)
         {
-            MonroviaUnlockAllRecords();
+            unlockAllRecords();
             Back(_collectItem);
         }
 
         private void _collectFromLocation_LoadEvent(RFSScreenControl sender, ScreenEventArgs e)
         {
-            if (_DefaultFromLocation)
-            {
-                ScreenHandler.DefaultText = _salesOrderTable.SDLOCN;
-            }
             // If the product is hard commited and we don't allow overrides. Verify that it exists in HC Location.
             if (_isHardCommitted && !_allowOverrideHardCommits)
             {
@@ -2739,7 +2377,8 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
         {
             if (_defaultVerifyItem)
             {
-                ScreenHandler.DefaultText = _LongItemNumber.ToString();
+                ScreenHandler.DefaultText = _itemMasterTable.FetchPrimaryItemNumber(_expectedShortItem,
+                                                _warehouseConstantsTable._DesignatedPrimaryItemNumber);
             }
         }
 
@@ -2761,7 +2400,7 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
             {
                 throw new RFS_Exception("ItemNumber");
             }
-            if (_shortItem != _itemMasterTable.IMITM)
+            if (_expectedShortItem != _itemMasterTable.IMITM)
             {
                 throw new RFS_Exception("ItemMismatch");
             }
@@ -2770,9 +2409,7 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
         #region Lot
         private void _collectLot_LoadEvent(RFSScreenControl sender, ScreenEventArgs e)
         {
-            _itemBranchTable.ValidateItemBranch(_collectBranch.ScreenInput, _shortItem);
             ScreenMap.Add("LotNumber", "");
-            ScreenHandler.DefaultText = _Lot;
             if (!isLotItem())
             {
                 _collectLot.CancelLoad = true;
@@ -2807,7 +2444,7 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
             {
                 throw new RFS_Exception("ExpiredLot");
             }
-            if (!_itemLocationTable.RetrieveItemLocationRecords(_collectBranch.ScreenInput, _shortItem, "N",
+            if (!_itemLocationTable.RetrieveItemLocationRecords(_collectBranch.ScreenInput, _shortItem, "N", 
                 (!_isHardCommitted) ? int.Parse(_dynamicPick) != 1 : false, _collectFromLocation.ScreenInput, _allowedHoldCodes, lot))
             {
                 if (!_itemLocationTable.RetrieveSpecificRecordWithQuantity(_collectBranch.ScreenInput, _shortItem, _locationTable.LMLOCN, lot))
@@ -2819,15 +2456,6 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
             if (_expectedLocn.Trim().ToUpper() != _locationTable.stbllocn.Trim().ToUpper() || _expectedLot.Trim().ToUpper() != _lotTable.IOLOTN.Trim().ToUpper())
             {
                 reservePick(_locationTable.stbllocn, _lotTable.IOLOTN);
-
-            }
-            using (var recordLockSOTable = new MonroviaJDETables.F4211(DataAccess, "recordLock"))
-            {
-                recordLockSOTable.OpenShipmentFetch(_collectBranch.ScreenInput, _Load, _allowedStatus, _LoadStatus,
-                    _shortItem, _OrderNumber, _DocType, _Lot);
-                recordLockSOTable.MonroviaLockRecord(UserSession.EnvironmentId, UserSession.UserId,
-                    WorkflowID);
-                _recordLocked = true;
             }
             _collectLot.ScreenInput = _lotTable.IOLOTN;
             ScreenMap.Add("LotNumber", _lotTable.IOLOTN);
@@ -2844,11 +2472,6 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
         {
             _itemLocationTable.UpdateCurrentRow();
             validateLot(_itemLocationTable.LILOTN);
-        }
-
-        private void _collectLot_BackValidationEvent(RFSScreenControl sender, ScreenEventArgs e)
-        {
-            MonroviaUnlockAllRecords();
         }
         #endregion
         #region Container
@@ -2897,41 +2520,10 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
         }
         #endregion
         #region UOM
-
-        private void _collectUnitOfMeasure_LoadEvent(RFSScreenControl sender, ScreenEventArgs e)
-        {	
-			_expectedQuantityInPrimaryUOM = ConvertToUOMQty(_salesOrderTable.SDUOM, _itemMasterTable.IMUOM1, 1);
-            if (_defaultUOMWFO == "S")
-            {
-                _defaultUOM = _salesOrderTable.SDUOM;
-            }
-            else
-            {
-                _defaultUOM = _itemMasterTable.DefaultUOM(_defaultUOMWFO);
-            }
-            ScreenHandler.DefaultText = _defaultUOM;
-        } 
-
-      /* old
         private void _collectUnitOfMeasure_LoadEvent(RFSScreenControl sender, ScreenEventArgs e)
         {
-            using (var UOMSOTable = new MonroviaJDETables.F4211(DataAccess, "recordLock"))
-            {
-                UOMSOTable.OpenShipmentFetch(_collectBranch.ScreenInput, _Load, _allowedStatus, _LoadStatus,
-                    _shortItem, _OrderNumber, _DocType, _Lot);
-                _expectedQuantityInPrimaryUOM = ConvertToUOMQty(UOMSOTable.SDUOM, _itemMasterTable.IMUOM1, 1);
-                Log.Debug("_expectedQuantityInPrimaryUOM = " + _expectedQuantityInPrimaryUOM);
-            }
-            if (_defaultUOMWFO == "S")
-            {
-                _defaultUOM = _salesOrderTable.SDUOM;
-            }
-            else
-            {
-                _defaultUOM = _itemMasterTable.DefaultUOM(_defaultUOMWFO);
-            }
             ScreenHandler.DefaultText = _defaultUOM;
-        }*/
+        }
 
         private void _collectUnitOfMeasure_EnterValidationEvent(RFSScreenControl sender, ScreenEventArgs e)
         {
@@ -2945,7 +2537,6 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
             {
                 throw new RFS_Exception("UnitOfMeasure");
             }
-            Log.Debug("_conversionFactor > _expectedQuantityInPrimaryUOM : " + _conversionFactor + " > " + _expectedQuantityInPrimaryUOM);
             if (!_allowLargerUOM && _conversionFactor > _expectedQuantityInPrimaryUOM)
             {
                 throw new RFS_Exception("UOMLargerThanPick");
@@ -3001,14 +2592,9 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
             {
                 throw new RFS_Exception("InvalidQuantity");
             } // end catch
-            /*
             if (isOverPick())
             {
                 throw new RFS_Exception("OverPickNotAllowed");
-            }*/
-            if (_quantity > _salesOrderTable.SDSOQS)
-            {
-                throw new RFS_Exception("OVERPICK");
             }
             if (!isProductAvailable())
             {
@@ -3017,7 +2603,7 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
             ScreenHandler.ScreenMap.Add("CollectedQuantity", _quantity.ToString());
 
             double totalQuantity = _quantity + getPickedQty();
-            ScreenMap.Add("PickQuantity", totalQuantity.ToString());
+            ScreenMap.Add("PickQuatity", totalQuantity.ToString());
             if (_cartonEnabled)
             {
                 Next(_collectPallet);
@@ -3025,10 +2611,6 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
             else if (isShortPick())
             {
                 // Not Carton
-                Next(_shortPickWarning);
-            }
-            else if (_quantity < _salesOrderTable.SDSOQS)
-            {
                 Next(_shortPickWarning);
             }
             else
@@ -3040,14 +2622,11 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
 
         private void _collectQuantity_LoadEvent(RFSScreenControl sender, ScreenEventArgs e)
         {
-            ScreenMap.Add("PickQuantity", _salesOrderTable.SDSOQS.ToString());
-            ScreenMap.Add("CollectedQuantity", _salesOrderTable.SDQTYT.ToString());
-            ScreenMap.Add("OrderQtyInCollectedUOM", _salesOrderTable.SDSOQS.ToString());
-
             if (_conversionFactor <= 0)
                 convertRemainSOQuantityToPrimaryUOM(false);
             ScreenMap.Add("Picked", getItemLotQty(_collectFromLocation.ScreenInput, _collectLot.ScreenInput).ToString());
-            ScreenMap.Add("RemainingQtyInCollectedUOM", _salesOrderTable.SDSOQS.ToString());
+            ScreenMap.Add("RemainingQtyInCollectedUOM", ((_expectedQuantityInPrimaryUOM / _conversionFactor)
+                - getItemLotQty(_collectFromLocation.ScreenInput, _collectLot.ScreenInput)).ToString());
             ScreenMap.Add("CollectedUOM", _collectUnitOfMeasure.ScreenInput);
         }
 
@@ -3098,15 +2677,13 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
             }
             else if (_forceLine)
             {
-                if (!_cartonEnabled)
+                if(!_cartonEnabled)
                     addCarton("", "");
                 SendToERP();
-                MonroviaUnlockAllRecords();
             }
             else
             {
                 SendToERP();
-                MonroviaUnlockAllRecords();
             }
         }
 
@@ -3122,17 +2699,16 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
             }
             else
             {
-                Next(CollectReasonCode);
+                SendToERP();
             }
         }
 
         private void _shortPickWarning_LoadEvent(RFSScreenControl sender, ScreenEventArgs e)
         {
             double totalQuantity = _quantity + getPickedQty();
-            //ScreenMap.Add("OrderQtyInCollectedUOM", ConvertToUOMQty(_salesOrderTable.SDUOM, _collectUnitOfMeasure.ScreenInput, _salesOrderTable.SDSOQS).ToString());
+            ScreenMap.Add("OrderQtyInCollectedUOM", ConvertToUOMQty(_salesOrderTable.SDUOM, _collectUnitOfMeasure.ScreenInput, _salesOrderTable.SDSOQS).ToString());
             ScreenMap.Add("PickQuantity", totalQuantity.ToString());
             ScreenMap.Add("PickUOM", _collectUnitOfMeasure.ScreenInput);
-            ScreenMap.Add("OrderQtyInCollectedUOM", _salesOrderTable.SDSOQS.ToString());
         }
         #endregion
         #region Serial
@@ -3406,16 +2982,7 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
 
         private void restartPickLoop()
         {
-            MonroviaUnlockAllRecords();
-            if (_salesOrderTable.OpenShipmentFetch(_collectBranch.ScreenInput, _Load, _allowedStatus, _LoadStatus))
-            {
-                RestartLoop(_collectItem);
-            }
-            else
-            {
-                RestartLoop(_collectPickMode);
-            }
-            /*
+            unlockAllRecords();
             if (!_forceLine)
             {
                 decisionTable2(_cartonEnabled);
@@ -3423,28 +2990,19 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
             else
             {
                 decisionTable4();
-            }*/
+            }
         }
 
         private bool RemoveOtherLinesForPrint()
         {
-            Log.Debug(string.Format("Printing Line {0} for item {1}", _salesOrderTable.SDLNID, _salesOrderTable.SDLITM));
-            Log.Debug(string.Format("Data set before lines are removed"));
-            logSDPTable();
-
             for (int i = 0; i < _salesOrderTable.Rows.Count; i++)
             {
-                if (_salesOrderTable.CurrentRow["SDLNID"].ToString() != _salesOrderTable.Rows[i]["SDLNID"].ToString())
+                if (_salesOrderTable.CurrentRow != _salesOrderTable.Rows[i])
                 {
-                    Log.Debug(string.Format("Row Count: {0} Deleting Line {1} for item {2}", i, _salesOrderTable.Rows[i]["SDLNID"].ToString(), _salesOrderTable.Rows[i]["SDLITM"].ToString()));
                     _salesOrderTable.Rows[i].Delete();
                 }
+                _salesOrderTable.ThisDataTable.AcceptChanges();
             }
-            _salesOrderTable.ThisDataTable.AcceptChanges();
-
-            Log.Debug(string.Format("Data set after lines are removed"));
-            logSDPTable();
-
             return true;
         }
 
@@ -3462,7 +3020,7 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
             PrintSystem.Copies = numberOfLabels;
 
             PrintSystem.ExtraPrintData.AddColumnAndSetDefaultData("_Container", _collectContainer.ScreenInput, false);
-            double totalQuantity = _quantity + getItemLotQty(_collectFromLocation.ScreenInput, _collectLot.ScreenInput);
+            double totalQuantity = _quantity + getItemLotQty(_collectFromLocation.ScreenInput, _collectLot.ScreenInput); 
             PrintSystem.ExtraPrintData.AddColumnAndSetDefaultData("_TransactionQuantity", totalQuantity.ToString(), false);
             PrintSystem.ExtraPrintData.AddColumnAndSetDefaultData("_UnitOfMeasure", _collectUnitOfMeasure.ScreenInput, false);
             PrintSystem.ExtraPrintData.AddColumnAndSetDefaultData("_FromLocation", _collectFromLocation.ScreenInput, false);
@@ -3486,13 +3044,10 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
         {
             if (confirm)
             {
-                _FromZeroPick = true;
-                Next(CollectReasonCode);
-                /*
                 _collectFromLocation.ScreenInput = _expectedLocn;
                 zeroPick();
-                MonroviaUnlockAllRecords();
-                decisionTable2();*/
+                unlockAllRecords();
+                decisionTable2();
             }
             else if (!confirm)
             {
@@ -3567,7 +3122,6 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
         private void _cartonShortPickOptions_LoadEvent(RFSScreenControl sender, ScreenEventArgs e)
         {
             double totalQuantity = _quantity + getPickedQty();
-
             if (int.Parse(_dynamicPick) < 3 || _collectLine.ScreenInput.Trim().Length > 0 || _collectItem.ScreenInput.Trim().Length > 0)
             {
                 ScreenMap.Add("OrderQtyInCollectedUOM", ConvertToUOMQty(_salesOrderTable.SDUOM, _collectUnitOfMeasure.ScreenInput, _salesOrderTable.SDSOQS).ToString());
@@ -3759,114 +3313,6 @@ namespace ICS.Monrovia.Wireless.JDE.Workflow.Picking
             }
         }
         #endregion
-
-        #region CollectLoad
-
-        private bool CollectLoad_ValidateMethod(string sInput)
-        {
-            try
-            {
-                Convert.ToDouble(sInput);
-            }
-            catch (Exception)
-            {
-                throw new RFS_Exception("NONNUMERIC");
-            }
-            if (!_salesOrderTable.OpenShipmentFetch(_collectBranch.ScreenInput, Convert.ToDouble(sInput), _allowedStatus, _LoadStatus))
-            {
-                throw new RFS_Exception("LOADINVALID");
-            }
-            highestSequence = 0;
-            _ItemsAtSequence = false;
-            foreach (DataRow dataRow in _salesOrderTable.Rows)
-            {
-                _salesOrderTable.CurrentRow = dataRow;
-                if (Double.Parse(_salesOrderTable["RSSTSQ"].ToString()) > highestSequence)
-                {
-                    highestSequence = Double.Parse(_salesOrderTable["RSSTSQ"].ToString());
-                }
-            }
-            _SequenceList = false;
-            _Load = Convert.ToDouble(sInput);
-            ScreenMap.Add("Load", _Load.ToString());
-            Next(_collectPrinter);
-            return true;
-        }
-
-        private void F4960Load_List_LoadEvent(RFSScreenControl sender, ScreenEventArgs e)
-        {
-            _LoadHeaderTable.FetchLoads(_collectBranch.ScreenInput, _LoadStatus);
-            F4960Load_List.DataColumnForValidation = "TMLDNM";
-            F4960Load_List.Table = _LoadHeaderTable;
-        }
-
-        #endregion
-
-        #region WarningHigherSequence
-
-        private bool WarningHigherSequence_ValidateMethod(string sInput)
-        {
-            if (!sInput.GetYesNo())
-            {
-                Next(_collectItem);
-                return true;
-            }
-            Next(_collectFromLocation);
-            return true;
-        }
-
-        #endregion
-
-        #region WarningDifferentSequence
-
-        private bool WarningDifferentSequence_ValidateMethod(string sInput)
-        {
-            if (!sInput.GetYesNo())
-            {
-                Next(_collectItem);
-                return true;
-            }
-            Next(_collectFromLocation);
-            return true;
-        }
-
-        #endregion
-
-        #region CollectReasonCode
-
-        private bool CollectReasonCode_ValidateMethod(string sInput)
-        {
-            if (!_UserDefinedCodeTable.ValidateUDC("40", "PE", sInput))
-            {
-                throw new RFS_Exception("UDCCODE");
-            }
-            _ReasonCode = sInput.ToUpper();
-            _ReasonCodeCheck = true;
-            if (_FromZeroPick)
-            {
-                _collectFromLocation.ScreenInput = _expectedLocn;
-                zeroPick();
-                MonroviaUnlockAllRecords();
-                //decisionTable2();
-            }
-            else
-            {
-                SendToERP();
-                MonroviaUnlockAllRecords();
-            }
-            Next(_printBarcodeLabels);
-            return true;
-        }
-
-        private void F0005_List_LoadEvent(RFSScreenControl sender, ScreenEventArgs e)
-        {
-            _UserDefinedCodeTable.FetchUDCs("40", "PE");
-            F0005_List.DataColumnForValidation = "DRKY";
-            F0005_List.Table = _UserDefinedCodeTable;
-        }
-
-        #endregion
-
         #endregion
     }
 }
